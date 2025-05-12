@@ -43,7 +43,7 @@ else:
     # Create .env file with default values if it doesn't exist
     with open(".env", "w") as env_file:
         env_file.write(f"""# OpenRouter API Key - Replace with your actual key
-OPENROUTER_API_KEY=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
+OPENROUTER_API_KEY=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
 
 # Google API Key
 GOOGLE_API_KEY=AIzaSyDDC8BfFj0OwfssNGq1hDYLa59NjGdeULs
@@ -51,6 +51,7 @@ GOOGLE_CSE_ID=81f9834bb6e4e44c1
 
 # Admin settings
 ADMIN_EMAIL=s-mostafa.abdelhameed@zewailcity.edu.eg
+ADMIN_PASSWORD=25102004Mlp
 
 # Email sending settings (for verification codes)
 EMAIL_SENDER=nutriquest.app@gmail.com
@@ -61,7 +62,7 @@ SMTP_PORT=587
     dotenv.load_dotenv()
 
 # Get API keys from environment variables
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "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")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "s-mostafa.abdelhameed@zewailcity.edu.eg")
