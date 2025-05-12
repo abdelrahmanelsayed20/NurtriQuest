@@ -54,7 +54,7 @@ ensure_java()
 
 # Initialize PyTerrier after Java setup
 import pyterrier as pt
-if not pt.started():
+if not pt.java.started():
     pt.init(boot_packages=["com.github.terrierteam:terrier-prf:-SNAPSHOT"])
 
 @st.cache_resource
