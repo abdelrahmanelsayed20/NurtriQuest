@@ -1,4 +1,16 @@
 import streamlit as st
+
+# Set page config - MUST be the first Streamlit command
+st.set_page_config(
+    page_title="NutriQuest",
+    page_icon="💪",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': "NutriQuest - A quest for the best nutrition and workout plans"
+    }
+)
+
 import pandas as pd
 import numpy as np
 import nltk
@@ -44,16 +56,6 @@ ensure_java()
 import pyterrier as pt
 if not pt.started():
     pt.init(boot_packages=["com.github.terrierteam:terrier-prf:-SNAPSHOT"])
-
-st.set_page_config(
-    page_title="NutriQuest",
-    page_icon="💪",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'About': "NutriQuest - A quest for the best nutrition and workout plans"
-    }
-)
 
 @st.cache_resource
 def download_nltk_resources():
