@@ -1338,44 +1338,62 @@ def main():
             processed_query = preprocess_query(user_input)
             search_index = st.session_state.search_index
             
-            if search_index is not None and processed_query:
+            # Initialize context_docs before any conditional blocks
+            context_docs = []
+            
+            # Ensure df is available and not empty
+            if 'df' not in locals() or df is None or df.empty:
+                print("Warning: DataFrame not available or empty. Using fallback content.")
+                context = "No nutrition database available. I'll try to help with general knowledge."
+            else:
                 try:
-                    # Get documents relevant to the user's query using BM25
-                    relevant_docs = bm25_ranking(search_index, processed_query, top_n=5)
-                    
-                    # Prepare context with the most relevant documents
-                    context_docs = []
-                    for doc_id in relevant_docs:
-                        doc_idx = int(doc_id)
-                        if doc_idx < len(df):
-                            topic = df.iloc[doc_idx]['topic']
-                            content = df.iloc[doc_idx]['wiki_content']
-                            if not isinstance(content, str):
-                                content = ""
-                            context_docs.append(f"Title: {topic}\nContent: {content[:1000]}")  # Include more content
-                    
-                    # If we don't have enough documents, add some general ones
-                    if len(context_docs) < 3:
-                        for i, row in df.head(5).iterrows():
-                            if len(context_docs) >= 5:
-                                break
+                    if search_index is not None and processed_query:
+                        try:
+                            # Get documents relevant to the user's query using BM25
+                            relevant_docs = bm25_ranking(search_index, processed_query, top_n=5)
+                            
+                            # Prepare context with the most relevant documents
+                            for doc_id in relevant_docs:
+                                doc_idx = int(doc_id)
+                                if doc_idx < len(df):
+                                    topic = df.iloc[doc_idx]['topic']
+                                    content = df.iloc[doc_idx]['wiki_content']
+                                    if not isinstance(content, str):
+                                        content = ""
+                                    context_docs.append(f"Title: {topic}\nContent: {content[:1000]}")  # Include more content
+                            
+                            # If we don't have enough documents, add some general ones
+                            if len(context_docs) < 3:
+                                for i, row in df.head(5).iterrows():
+                                    if len(context_docs) >= 5:
+                                        break
+                                    content = row['wiki_content']
+                                    if not isinstance(content, str):
+                                        content = ""
+                                    context_doc = f"Title: {row['topic']}\nContent: {content[:500]}"
+                                    if context_doc not in context_docs:
+                                        context_docs.append(context_doc)
+                        except Exception as e:
+                            # Fallback to general documents if search fails
+                            print(f"Error retrieving relevant documents: {str(e)}")
+                            for i, row in df.head(8).iterrows():
+                                content = row['wiki_content']
+                                if not isinstance(content, str):
+                                    content = ""
+                                context_docs.append(f"Title: {row['topic']}\nContent: {content[:500]}")
+                    else:
+                        # Fallback if index is not available
+                        for i, row in df.head(8).iterrows():
                             content = row['wiki_content']
                             if not isinstance(content, str):
                                 content = ""
-                            context_doc = f"Title: {row['topic']}\nContent: {content[:500]}"
-                            if context_doc not in context_docs:
-                                context_docs.append(context_doc)
+                            context_docs.append(f"Title: {row['topic']}\nContent: {content[:500]}")
+                    
+                    context = "\n\n".join(context_docs)
+                    
                 except Exception as e:
-                    # Fallback to general documents if search fails
-                    print(f"Error retrieving relevant documents: {str(e)}")
-                    context_docs = []
-                    for i, row in df.head(8).iterrows():
-                        content = row['wiki_content']
-                        if not isinstance(content, str):
-                            content = ""
-                        context_docs.append(f"Title: {row['topic']}\nContent: {content[:500]}")
-            
-            context = "\n\n".join(context_docs)
+                    print(f"Error preparing context: {str(e)}")
+                    context = "Error retrieving nutrition information. I'll try to help with general knowledge."
 
             creator_keywords = [
                 "who is your creator", "who made you", "who created you", "who built you", "who are your creators", "who developed you"
