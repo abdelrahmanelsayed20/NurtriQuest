@@ -6,12 +6,44 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer
 import re
-import pyterrier as pt
 import time
 import logging
 import requests
+import os
+import tarfile
+import urllib.request
+from pathlib import Path
 
+# Configure logging
 logging.getLogger("org.terrier").setLevel(logging.ERROR)
+
+@st.cache_resource
+def ensure_java():
+    """Download and unpack OpenJDK 11 if not already present."""
+    java_dir = Path.home() / ".java"
+    if not java_dir.exists():
+        java_dir.mkdir(parents=True)
+        # Example JDK 11 URL; you may choose a more recent build if desired
+        jdk_url = (
+            "https://download.java.net/openjdk/jdk11/ri/openjdk-11+28_linux-x64_bin.tar.gz"
+        )
+        archive = java_dir / "jdk11.tar.gz"
+        urllib.request.urlretrieve(jdk_url, archive)
+        with tarfile.open(archive) as tar:
+            tar.extractall(java_dir)
+    # Locate the unpacked JDK root
+    jdk_root = next(java_dir.glob("jdk-*"))
+    os.environ["JAVA_HOME"] = str(jdk_root)
+    os.environ["PATH"] = f"{jdk_root}/bin:" + os.environ.get("PATH", "")
+    return True
+
+# Ensure Java is in place before any PyTerrier initialization
+ensure_java()
+
+# Initialize PyTerrier after Java setup
+import pyterrier as pt
+if not pt.started():
+    pt.init(boot_packages=["com.github.terrierteam:terrier-prf:-SNAPSHOT"])
 
 st.set_page_config(
     page_title="NutriQuest",
@@ -22,9 +54,6 @@ st.set_page_config(
         'About': "NutriQuest - A quest for the best nutrition and workout plans"
     }
 )
-
-if not pt.started():
-    pt.init(boot_packages=["com.github.terrierteam:terrier-prf:-SNAPSHOT"])
 
 @st.cache_resource
 def download_nltk_resources():
