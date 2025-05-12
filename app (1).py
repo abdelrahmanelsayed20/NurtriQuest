@@ -290,13 +290,52 @@ def query_expansion_rm3(index, query, df, top_n=10):
 
         expansion_terms = {}
 
-        for i in range(min(5, len(bm25_results))):
+        # Track sources used for expansion to ensure diversity
+        sources_used = {
+            'Wikipedia': 0,
+            'YouTube': 0,
+            'Google': 0
+        }
+        max_per_source = 2  # Maximum documents to use from each source
+
+        for i in range(min(10, len(bm25_results))):
             doc_id = int(bm25_results["docid"][i])
             if doc_id < 0 or doc_id >= len(df):
                 continue
-
-            doc_text = df.iloc[doc_id]['wiki_content']
-            if not isinstance(doc_text, str):
+                
+            # Get source information
+            source = df.iloc[doc_id]['source']
+            
+            # Skip if we've already used enough from this source
+            if sources_used.get(source, 0) >= max_per_source:
+                continue
+                
+            # Increment source counter
+            sources_used[source] = sources_used.get(source, 0) + 1
+            
+            # Get text based on source type
+            if source == 'Wikipedia':
+                # For Wikipedia, use the wiki_content
+                doc_text = str(df.iloc[doc_id].get('wiki_content', ''))
+            else:
+                # For other sources, use the topic and derived terms from the link
+                topic = str(df.iloc[doc_id]['topic'])
+                link = str(df.iloc[doc_id]['link'])
+                
+                # Extract terms from link (e.g., from YouTube search URLs or Google search URLs)
+                link_terms = ''
+                if 'youtube.com' in link and 'search_query=' in link:
+                    # Extract search terms from YouTube link
+                    search_part = link.split('search_query=')[-1].split('&')[0]
+                    link_terms = search_part.replace('+', ' ').replace('%20', ' ')
+                elif 'google.com/search' in link and 'q=' in link:
+                    # Extract search terms from Google link
+                    search_part = link.split('q=')[-1].split('&')[0]
+                    link_terms = search_part.replace('+', ' ').replace('%20', ' ')
+                
+                doc_text = f"{topic} {link_terms}"
+                
+            if not isinstance(doc_text, str) or not doc_text.strip():
                 continue
 
             words = word_tokenize(doc_text.lower())
@@ -370,6 +409,37 @@ def calculate_ndcg(relevant_docs, retrieved_docs):
         st.warning(f"Error in NDCG calculation: {e}")
         return 0
 
+def extract_keywords_from_link(link):
+    """Extract meaningful keywords from YouTube or Google links."""
+    try:
+        keywords = ""
+        if 'youtube.com' in link and 'search_query=' in link:
+            # Extract search terms from YouTube link
+            search_part = link.split('search_query=')[-1].split('&')[0]
+            keywords = search_part.replace('+', ' ').replace('%20', ' ')
+        elif 'google.com/search' in link and 'q=' in link:
+            # Extract search terms from Google link
+            search_part = link.split('q=')[-1].split('&')[0]
+            keywords = search_part.replace('+', ' ').replace('%20', ' ')
+        elif 'wikipedia.org/wiki/' in link:
+            # Extract topic from Wikipedia link
+            topic = link.split('/wiki/')[-1].replace('_', ' ')
+            keywords = topic
+        
+        # Clean up keywords
+        keywords = re.sub(r'[^a-zA-Z0-9\s]', ' ', keywords)
+        keywords = re.sub(r'\s+', ' ', keywords).strip()
+        
+        if keywords:
+            return f"Keywords: {keywords}"
+        else:
+            # Fallback to just returning the domain
+            domain = link.split('//')[1].split('/')[0]
+            return f"Source: {domain}"
+    except Exception as e:
+        print(f"Error extracting keywords from link: {e}")
+        return ""
+
 def comprehensive_search(index, query, df, unique_terms, inverted_index, top_n=10, use_query_expansion=True, use_bert=False, selected_sources=None):
     start_time = time.time()
 
@@ -403,14 +473,29 @@ def comprehensive_search(index, query, df, unique_terms, inverted_index, top_n=1
             if selected_sources and source not in selected_sources:
                 continue
 
-            content = str(df.iloc[doc_idx]['content']).lower()
+            content = str(df.iloc[doc_idx]['content']).lower() if 'content' in df.columns else ""
             topic = str(df.iloc[doc_idx]['topic']).lower()
+            
+            # Add source-specific content handling
+            if source == 'Wikipedia' and 'wiki_content' in df.columns:
+                wiki_content = str(df.iloc[doc_idx]['wiki_content']).lower()
+                if isinstance(wiki_content, str):
+                    content += " " + wiki_content
 
             query_terms = set(processed_query.lower().split())
             content_matches = sum(1 for term in query_terms if term in content)
             topic_matches = sum(1 for term in query_terms if term in topic)
-
-            relevance_score = (content_matches * 0.3) + (topic_matches * 0.7)
+            
+            # Give different weights to different sources
+            source_weight = 1.0
+            if source == 'Wikipedia':
+                source_weight = 1.0  # Full weight
+            elif source == 'YouTube':
+                source_weight = 0.9  # Slightly less
+            elif source == 'Google':
+                source_weight = 0.8  # Even less
+                
+            relevance_score = ((content_matches * 0.3) + (topic_matches * 0.7)) * source_weight
 
             doc_details.append({
                 'id': doc_id,
@@ -467,9 +552,31 @@ def comprehensive_search(index, query, df, unique_terms, inverted_index, top_n=1
 def load_data():
     try:
         df = pd.read_csv('bodybuilding_search_results.csv')
-        df['processed'] = df['wiki_content'].apply(preprocess_document)
+        
+        # Preprocess wiki_content
+        df['processed_wiki'] = df['wiki_content'].apply(preprocess_document)
+        
+        # Ensure content field exists and is populated for all sources
         if 'content' not in df.columns:
-            df['content'] = df['wiki_content']
+            # Create more meaningful content for all sources
+            df['content'] = df.apply(lambda row: 
+                # For Wikipedia, use wiki_content
+                row['wiki_content'] if row['source'] == 'Wikipedia' else 
+                # For YouTube, create enriched content from topic and link
+                (f"Video about {row['topic']}. " + 
+                extract_keywords_from_link(row['link']) if row['source'] == 'YouTube' else
+                # For Google, create enriched content from topic and link
+                f"Search result about {row['topic']}. " + 
+                extract_keywords_from_link(row['link']))
+                , axis=1)
+        
+        # Add a combined content field that integrates all available information
+        df['combined_content'] = df.apply(lambda row: 
+            f"{row['topic']} {row['source']} {row.get('content', '')} {row.get('wiki_content', '')}", 
+            axis=1)
+        
+        # Process the combined content for searching
+        df['processed'] = df['combined_content'].apply(preprocess_document)
 
         sources_count = df['source'].value_counts()
         print(f"Dataset sources distribution: {sources_count}")
@@ -483,6 +590,10 @@ def load_data():
             youtube_entries['link'] = youtube_entries['link'].apply(
                 lambda x: f"https://www.youtube.com/results?search_query={x.split('/')[-1].replace('_', '+')}"
             )
+            # Keep wiki_content but mark it as from YouTube adaptation
+            youtube_entries['content'] = youtube_entries.apply(
+                lambda row: f"Video about {row['topic']}. Keywords: {extract_keywords_from_link(row['link'])}", axis=1
+            )
             df = pd.concat([df, youtube_entries], ignore_index=True)
 
         if 'Google' not in df['source'].values or df[df['source'] == 'Google'].shape[0] < 10:
@@ -492,7 +603,19 @@ def load_data():
             google_entries['link'] = google_entries['link'].apply(
                 lambda x: f"https://www.google.com/search?q={x.split('/')[-1].replace('_', '+')}"
             )
+            # Keep wiki_content but mark it as from Google adaptation
+            google_entries['content'] = google_entries.apply(
+                lambda row: f"Search result about {row['topic']}. Keywords: {extract_keywords_from_link(row['link'])}", axis=1
+            )
             df = pd.concat([df, google_entries], ignore_index=True)
+
+        # Regenerate combined content after augmentation
+        df['combined_content'] = df.apply(lambda row: 
+            f"{row['topic']} {row['source']} {row.get('content', '')} {row.get('wiki_content', '')}", 
+            axis=1)
+        
+        # Regenerate processed content after augmentation
+        df['processed'] = df['combined_content'].apply(preprocess_document)
 
         print(f"After augmentation, sources distribution: {df['source'].value_counts()}")
 
@@ -514,6 +637,7 @@ def create_index(df):
             print("Warning: Some documents have no processed content. Adding minimal content...")
             df.loc[df['processed'].isna(), 'processed'] = df.loc[df['processed'].isna(), 'topic']
 
+        # Create source-specific metrics
         source_topics = {}
         for source in df['source'].unique():
             topics = df[df['source'] == source]['topic'].unique().tolist()
@@ -522,6 +646,7 @@ def create_index(df):
 
         print("Creating new index...")
         indexer = pt.DFIndexer("./DatasetIndex", overwrite=True)
+        # Use the combined processed field that includes all sources
         index_ref = indexer.index(df["processed"], df["docno"])
 
         index = pt.IndexFactory.of(index_ref)
@@ -943,40 +1068,47 @@ def analyze_dataset_for_relevant_docs(df):
 
     for idx, row in df.iterrows():
         topic = str(row['topic']).lower() if 'topic' in df.columns else ""
-        content = str(row['wiki_content']).lower() if 'wiki_content' in df.columns else ""
-
-        if ('protein' in topic or 'protein' in content) and ('diet' in topic or 'diet' in content or 'nutrition' in topic or 'nutrition' in content):
+        
+        # Look for content in multiple fields
+        wiki_content = str(row.get('wiki_content', '')).lower()
+        content = str(row.get('content', '')).lower()
+        combined_content = str(row.get('combined_content', '')).lower()
+        
+        # Use the richest content available
+        if combined_content:
+            searchable_content = combined_content
+        elif content:
+            searchable_content = content
+        else:
+            searchable_content = wiki_content
+        
+        # Now search in both topic and the best available content
+        if ('protein' in topic or 'protein' in searchable_content) and ('diet' in topic or 'diet' in searchable_content or 'nutrition' in topic or 'nutrition' in searchable_content):
             relevant_docs["protein diet"].append(idx)
 
-        if ('muscle' in topic or 'muscle' in content) and ('build' in topic or 'build' in content or 'growth' in topic or 'growth' in content):
+        if ('muscle' in topic or 'muscle' in searchable_content) and ('build' in topic or 'build' in searchable_content or 'growth' in topic or 'growth' in searchable_content):
             relevant_docs["muscle building"].append(idx)
 
-        if ('weight' in topic or 'weight' in content) and ('loss' in topic or 'loss' in content or 'fat' in topic or 'fat' in content):
+        if ('weight' in topic or 'weight' in searchable_content) and ('loss' in topic or 'loss' in searchable_content or 'fat' in topic or 'fat' in searchable_content):
             relevant_docs["weight loss"].append(idx)
 
-    if len(relevant_docs["protein diet"]) < 5:
-        protein_candidates = []
-        for idx, row in df.iterrows():
-            topic = str(row['topic']).lower() if 'topic' in df.columns else ""
-            if 'protein' in topic and idx not in relevant_docs["protein diet"]:
-                protein_candidates.append(idx)
-        relevant_docs["protein diet"].extend(protein_candidates[:5])
-
-    if len(relevant_docs["muscle building"]) < 5:
-        muscle_candidates = []
-        for idx, row in df.iterrows():
-            topic = str(row['topic']).lower() if 'topic' in df.columns else ""
-            if 'muscle' in topic and idx not in relevant_docs["muscle building"]:
-                muscle_candidates.append(idx)
-        relevant_docs["muscle building"].extend(muscle_candidates[:5])
-
-    if len(relevant_docs["weight loss"]) < 5:
-        weight_candidates = []
-        for idx, row in df.iterrows():
-            topic = str(row['topic']).lower() if 'topic' in df.columns else ""
-            if 'weight' in topic and idx not in relevant_docs["weight loss"]:
-                weight_candidates.append(idx)
-        relevant_docs["weight loss"].extend(weight_candidates[:5])
+    # Ensure minimum number of documents per category
+    for query, docs in relevant_docs.items():
+        if len(docs) < 5:
+            keywords = query.split()
+            candidates = []
+            
+            for idx, row in df.iterrows():
+                if idx not in docs:  # Skip already included docs
+                    topic = str(row['topic']).lower()
+                    # Check if any keyword appears in the topic
+                    if any(keyword in topic for keyword in keywords):
+                        candidates.append(idx)
+            
+            # Add candidates to reach minimum of 5 documents
+            relevant_docs[query].extend(candidates[:max(0, 5 - len(docs))])
+            
+            print(f"Added {max(0, 5 - len(docs))} documents to {query} category")
 
     return relevant_docs
 
@@ -1357,37 +1489,119 @@ def main():
                                 doc_idx = int(doc_id)
                                 if doc_idx < len(df):
                                     topic = df.iloc[doc_idx]['topic']
-                                    content = df.iloc[doc_idx]['wiki_content']
-                                    if not isinstance(content, str):
-                                        content = ""
-                                    context_docs.append(f"Title: {topic}\nContent: {content[:1000]}")  # Include more content
+                                    source = df.iloc[doc_idx]['source']
+                                    link = df.iloc[doc_idx]['link']
+                                    
+                                    # Get appropriate content based on source
+                                    if source == 'Wikipedia':
+                                        content = df.iloc[doc_idx]['wiki_content']
+                                        if not isinstance(content, str):
+                                            content = ""
+                                        content_snippet = f"Content: {content[:1000]}"
+                                    elif source == 'YouTube':
+                                        content_snippet = f"Video link: {link}"
+                                    elif source == 'Google':
+                                        content_snippet = f"Search result: {link}"
+                                    else:
+                                        # Default fallback
+                                        content = df.iloc[doc_idx].get('content', '')
+                                        if not isinstance(content, str):
+                                            content = ""
+                                        content_snippet = f"Content: {content[:500]}"
+                                    
+                                    context_docs.append(f"Title: {topic}\nSource: {source}\n{content_snippet}")
                             
                             # If we don't have enough documents, add some general ones
                             if len(context_docs) < 3:
-                                for i, row in df.head(5).iterrows():
-                                    if len(context_docs) >= 5:
-                                        break
-                                    content = row['wiki_content']
-                                    if not isinstance(content, str):
-                                        content = ""
-                                    context_doc = f"Title: {row['topic']}\nContent: {content[:500]}"
-                                    if context_doc not in context_docs:
-                                        context_docs.append(context_doc)
+                                # Get a mix of sources for general results
+                                for source_type in df['source'].unique():
+                                    source_df = df[df['source'] == source_type].head(2)
+                                    for i, row in source_df.iterrows():
+                                        if len(context_docs) >= 5:
+                                            break
+                                        
+                                        topic = row['topic']
+                                        source = row['source']
+                                        link = row['link']
+                                        
+                                        # Get appropriate content based on source
+                                        if source == 'Wikipedia':
+                                            content = row['wiki_content']
+                                            if not isinstance(content, str):
+                                                content = ""
+                                            content_snippet = f"Content: {content[:500]}"
+                                        elif source == 'YouTube':
+                                            content_snippet = f"Video link: {link}"
+                                        elif source == 'Google':
+                                            content_snippet = f"Search result: {link}"
+                                        else:
+                                            content = row.get('content', '')
+                                            if not isinstance(content, str):
+                                                content = ""
+                                            content_snippet = f"Content: {content[:300]}"
+                                        
+                                        context_doc = f"Title: {topic}\nSource: {source}\n{content_snippet}"
+                                        if context_doc not in context_docs:
+                                            context_docs.append(context_doc)
                         except Exception as e:
                             # Fallback to general documents if search fails
                             print(f"Error retrieving relevant documents: {str(e)}")
-                            for i, row in df.head(8).iterrows():
-                                content = row['wiki_content']
-                                if not isinstance(content, str):
-                                    content = ""
-                                context_docs.append(f"Title: {row['topic']}\nContent: {content[:500]}")
+                            # Get a mix of sources for fallback results
+                            for source_type in df['source'].unique():
+                                source_df = df[df['source'] == source_type].head(2)
+                                for i, row in source_df.iterrows():
+                                    if len(context_docs) >= 6:
+                                        break
+                                    
+                                    topic = row['topic']
+                                    source = row['source']
+                                    link = row['link']
+                                    
+                                    if source == 'Wikipedia':
+                                        content = row['wiki_content']
+                                        if not isinstance(content, str):
+                                            content = ""
+                                        content_snippet = f"Content: {content[:500]}"
+                                    elif source == 'YouTube':
+                                        content_snippet = f"Video link: {link}"
+                                    elif source == 'Google':
+                                        content_snippet = f"Search result: {link}"
+                                    else:
+                                        content = row.get('content', '')
+                                        if not isinstance(content, str):
+                                            content = ""
+                                        content_snippet = f"Content: {content[:300]}"
+                                    
+                                    context_docs.append(f"Title: {topic}\nSource: {source}\n{content_snippet}")
                     else:
                         # Fallback if index is not available
-                        for i, row in df.head(8).iterrows():
-                            content = row['wiki_content']
-                            if not isinstance(content, str):
-                                content = ""
-                            context_docs.append(f"Title: {row['topic']}\nContent: {content[:500]}")
+                        # Get a mix of sources
+                        for source_type in df['source'].unique():
+                            source_df = df[df['source'] == source_type].head(2)
+                            for i, row in source_df.iterrows():
+                                if len(context_docs) >= 6:
+                                    break
+                                
+                                topic = row['topic']
+                                source = row['source']
+                                link = row['link']
+                                
+                                if source == 'Wikipedia':
+                                    content = row['wiki_content']
+                                    if not isinstance(content, str):
+                                        content = ""
+                                    content_snippet = f"Content: {content[:500]}"
+                                elif source == 'YouTube':
+                                    content_snippet = f"Video link: {link}"
+                                elif source == 'Google':
+                                    content_snippet = f"Search result: {link}"
+                                else:
+                                    content = row.get('content', '')
+                                    if not isinstance(content, str):
+                                        content = ""
+                                    content_snippet = f"Content: {content[:300]}"
+                                
+                                context_docs.append(f"Title: {topic}\nSource: {source}\n{content_snippet}")
                     
                     context = "\n\n".join(context_docs)
                     
