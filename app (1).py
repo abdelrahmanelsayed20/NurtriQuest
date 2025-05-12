@@ -51,6 +51,12 @@ GOOGLE_CSE_ID=81f9834bb6e4e44c1
 
 # Admin settings
 ADMIN_EMAIL=s-mostafa.abdelhameed@zewailcity.edu.eg
+
+# Email sending settings (for verification codes)
+EMAIL_SENDER=nutriquest.app@gmail.com
+EMAIL_PASSWORD=your_app_password_here
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
 """)
     dotenv.load_dotenv()
 
@@ -59,6 +65,12 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "s-mostafa.abdelhameed@zewailcity.edu.eg")
+
+# Email settings
+EMAIL_SENDER = os.getenv("EMAIL_SENDER", "nutriquest.app@gmail.com")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 
 # Add .env to .gitignore to prevent API keys from being committed
 if not os.path.exists(".gitignore"):
@@ -79,12 +91,54 @@ def generate_verification_code():
 def send_verification_email(email, code):
     """Send verification email with code"""
     try:
-        # For demo purposes, just print the code instead of actually sending email
-        print(f"[DEMO MODE] Verification code for {email}: {code}")
-        st.toast(f"Verification code sent to {email}. Check console for demo code.")
+        # Create email message
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_SENDER
+        msg['To'] = email
+        msg['Subject'] = "NutriQuest Admin Verification Code"
+        
+        # Email body
+        body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #f9f9f9; padding: 20px; border-radius: 10px; border: 1px solid #ddd;">
+                <h2 style="color: #ffdd57; text-align: center;">NutriQuest Admin Verification</h2>
+                <p>Hello Admin,</p>
+                <p>Your verification code for NutriQuest admin access is:</p>
+                <div style="background-color: #ffdd57; color: #333; font-size: 24px; font-weight: bold; text-align: center; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    {code}
+                </div>
+                <p>This code will expire in 10 minutes.</p>
+                <p>If you did not request this code, please ignore this email.</p>
+                <p>Thank you,<br>NutriQuest Team</p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Attach HTML body
+        msg.attach(MIMEText(body, 'html'))
+        
+        # Connect to SMTP server and send email
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()  # Secure the connection
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.send_message(msg)
+        
+        # Log success
+        print(f"Verification email sent to {email}")
         return True
+        
     except Exception as e:
-        print(f"Error sending email: {str(e)}")
+        # Log error and also print verification code for backup access
+        error_msg = f"Error sending email: {str(e)}"
+        print(error_msg)
+        
+        # Fallback to console output in case of email sending failure
+        print(f"[FALLBACK] Verification code for {email}: {code}")
+        
+        # Show error in UI but don't reveal the code in UI
+        st.toast(f"Failed to send email: {str(e)}. Check logs for fallback access.")
         return False
 
 def verify_admin_email(email):
