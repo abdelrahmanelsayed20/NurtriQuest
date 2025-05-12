@@ -65,6 +65,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "s-mostafa.abdelhameed@zewailcity.edu.eg")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "25102004Mlp")  # Default password if not in .env
 
 # Email settings
 EMAIL_SENDER = os.getenv("EMAIL_SENDER", "nutriquest.app@gmail.com")
@@ -83,75 +84,14 @@ elif ".env" not in open(".gitignore").read():
 # Configure logging
 logging.getLogger("org.terrier").setLevel(logging.ERROR)
 
-# Admin authentication helpers
-def generate_verification_code():
-    """Generate a 6-digit verification code"""
-    return ''.join(random.choices(string.digits, k=6))
-
-def send_verification_email(email, code):
-    """Send verification email with code"""
-    try:
-        # Create email message
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_SENDER
-        msg['To'] = email
-        msg['Subject'] = "NutriQuest Admin Verification Code"
-        
-        # Email body
-        body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-            <div style="max-width: 600px; margin: 0 auto; background-color: #f9f9f9; padding: 20px; border-radius: 10px; border: 1px solid #ddd;">
-                <h2 style="color: #ffdd57; text-align: center;">NutriQuest Admin Verification</h2>
-                <p>Hello Admin,</p>
-                <p>Your verification code for NutriQuest admin access is:</p>
-                <div style="background-color: #ffdd57; color: #333; font-size: 24px; font-weight: bold; text-align: center; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    {code}
-                </div>
-                <p>This code will expire in 10 minutes.</p>
-                <p>If you did not request this code, please ignore this email.</p>
-                <p>Thank you,<br>NutriQuest Team</p>
-            </div>
-        </body>
-        </html>
-        """
-        
-        # Attach HTML body
-        msg.attach(MIMEText(body, 'html'))
-        
-        # Connect to SMTP server and send email
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()  # Secure the connection
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.send_message(msg)
-        
-        # Log success
-        print(f"Verification email sent to {email}")
-        return True
-        
-    except Exception as e:
-        # Log error and also print verification code for backup access
-        error_msg = f"Error sending email: {str(e)}"
-        print(error_msg)
-        
-        # Fallback to console output in case of email sending failure
-        print(f"[FALLBACK] Verification code for {email}: {code}")
-        
-        # Show error in UI but don't reveal the code in UI
-        st.toast(f"Failed to send email: {str(e)}. Check logs for fallback access.")
-        return False
-
-def verify_admin_email(email):
-    """Check if the email is the admin email"""
-    return email.lower() == ADMIN_EMAIL.lower()
+# Admin authentication helpers (simplified to use password)
+def verify_admin_password(password):
+    """Check if the password matches the admin password"""
+    return password == ADMIN_PASSWORD
 
 # Session state initialization
 if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
-if "verification_code" not in st.session_state:
-    st.session_state.verification_code = None
-if "verification_expiry" not in st.session_state:
-    st.session_state.verification_expiry = None
 if "debug_mode" not in st.session_state:
     st.session_state.debug_mode = False
 
@@ -1043,39 +983,15 @@ def main():
     # Admin authentication section (hidden in an expander)
     with st.sidebar.expander("Admin Access", expanded=False):
         if not st.session_state.admin_authenticated:
-            admin_email = st.text_input("Admin Email", help="Enter admin email for verification", key="admin_email_input")
+            admin_password = st.text_input("Admin Password", type="password", help="Enter admin password for verification", key="admin_password_input")
             
-            # Step 1: Request verification code
-            if st.button("Request Verification Code") and admin_email:
-                if verify_admin_email(admin_email):
-                    # Generate and store verification code with 10-minute expiry
-                    verification_code = generate_verification_code()
-                    st.session_state.verification_code = verification_code
-                    st.session_state.verification_expiry = datetime.now() + timedelta(minutes=10)
-                    
-                    # Send verification email (demo mode just prints to console)
-                    if send_verification_email(admin_email, verification_code):
-                        st.success(f"Verification code sent to {admin_email}")
-                    else:
-                        st.error("Failed to send verification code")
+            if st.button("Login"):
+                if verify_admin_password(admin_password):
+                    st.session_state.admin_authenticated = True
+                    st.success("Admin authenticated successfully!")
+                    st.rerun()  # Refresh the page to show admin options
                 else:
-                    st.error("Invalid admin email")
-            
-            # Step 2: Verify code
-            verification_code_input = st.text_input("Verification Code", help="Enter the code sent to your email", key="verification_code_input")
-            
-            if st.button("Verify") and verification_code_input:
-                if st.session_state.verification_code and st.session_state.verification_expiry:
-                    if datetime.now() > st.session_state.verification_expiry:
-                        st.error("Verification code expired. Please request a new one.")
-                    elif verification_code_input == st.session_state.verification_code:
-                        st.session_state.admin_authenticated = True
-                        st.success("Admin verified successfully!")
-                        st.rerun()  # Refresh the page to show admin options
-                    else:
-                        st.error("Invalid verification code")
-                else:
-                    st.error("Please request a verification code first")
+                    st.error("Invalid password")
         else:
             st.success("Admin authenticated")
             if st.button("Logout"):
