@@ -26,6 +26,7 @@ import tarfile
 import urllib.request
 from pathlib import Path
 import json
+import traceback
 
 # Configure logging
 logging.getLogger("org.terrier").setLevel(logging.ERROR)
@@ -445,7 +446,6 @@ def create_index(df):
         return index, unique_terms, inverted_index
     except Exception as e:
         st.error(f"Error creating index: {e}")
-        import traceback
         traceback.print_exc()
         return None, [], {}
 
@@ -913,10 +913,14 @@ def main():
 
     st.sidebar.markdown("## Search Options")
     ai_enhanced = st.sidebar.toggle("AI Enhanced Chatbot", value=False, help="Switch to AI-powered chat mode")
+    debug_mode = st.sidebar.toggle("Debug Mode", value=False, help="Show detailed error information for troubleshooting")
 
     if ai_enhanced:
         st.markdown("<h2 style='color:#ffdd57;'>NutriQuest AI Chatbot</h2>", unsafe_allow_html=True)
         st.info("Ask anything about fitness and nutrition. The AI will only use the site's documents as reference.")
+
+        if debug_mode:
+            st.warning("Debug mode is enabled. Detailed error information will be displayed if any errors occur.")
 
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
@@ -1025,13 +1029,39 @@ def main():
             try:
                 with st.spinner("Thinking..."):
                     # Log the API request for debugging purposes
-                    print(f"Sending request to OpenRouter.ai API with model: mistralai/mistral-7b-instruct")
+                    req_data = {
+                        "url": "https://openrouter.ai/api/v1/chat/completions",
+                        "headers": {k: v if k != "Authorization" else "Bearer sk-****" for k, v in headers.items()},
+                        "model": data["model"],
+                        "messages_count": len(data["messages"])
+                    }
+                    
+                    if debug_mode:
+                        st.code(f"Request: {json.dumps(req_data, indent=2)}", language="json")
+                        print(f"API Request: {json.dumps(req_data, indent=2)}")
+                    
+                    print(f"Sending request to OpenRouter.ai API with model: {data['model']}")
                     
                     response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=60)
-                    response_json = response.json()
-
-                    # Print response status and headers for debugging
+                    
+                    try:
+                        response_json = response.json()
+                    except json.JSONDecodeError:
+                        response_json = {"error": "Invalid JSON response"}
+                        if debug_mode:
+                            response_json["raw_response"] = response.text
+                    
+                    # Print response status for debugging
                     print(f"API Response Status: {response.status_code}")
+                    
+                    if debug_mode:
+                        # Display full response for debugging
+                        resp_data = {
+                            "status_code": response.status_code,
+                            "response": response_json
+                        }
+                        st.code(f"Response: {json.dumps(resp_data, indent=2)}", language="json")
+                        print(f"API Response: {json.dumps(resp_data, indent=2)}")
                     
                     if response.status_code == 200:
                         if 'choices' in response_json and len(response_json['choices']) > 0:
@@ -1039,27 +1069,46 @@ def main():
                             ai_reply = re.sub(r'```[a-zA-Z]*\n?|```', '', ai_reply).strip()
                         else:
                             error_detail = json.dumps(response_json, indent=2)
-                            st.error(f"Unexpected API response format: {error_detail}")
+                            error_msg = f"Unexpected API response format: {error_detail}"
                             print(f"API Error - Unexpected response format: {error_detail}")
-                            ai_reply = "I apologize, but I received an unexpected response format from the AI service. Please try again."
+                            if debug_mode:
+                                ai_reply = f"**DEBUG - ERROR:** {error_msg}"
+                            else:
+                                st.error(error_msg)
+                                ai_reply = "I apologize, but I received an unexpected response format from the AI service. Please try again."
                     else:
                         error_msg = f"API Error (Status {response.status_code}): {response.text}"
-                        st.error(error_msg)
                         print(f"API Error - Status {response.status_code}: {response.text}")
-                        ai_reply = f"Sorry, there was an error contacting the AI API. Please try again later."
+                        if debug_mode:
+                            ai_reply = f"**DEBUG - ERROR:** {error_msg}"
+                        else:
+                            st.error(error_msg)
+                            ai_reply = "Sorry, there was an error contacting the AI API. Please try again later."
             except requests.exceptions.Timeout:
-                print("API Error - Request timeout after 60 seconds")
-                ai_reply = "Sorry, the request timed out. Please try again."
+                error_msg = "API Error - Request timeout after 60 seconds"
+                print(error_msg)
+                if debug_mode:
+                    ai_reply = f"**DEBUG - ERROR:** {error_msg}"
+                else:
+                    ai_reply = "Sorry, the request timed out. Please try again."
             except requests.exceptions.RequestException as e:
                 error_details = str(e)
-                st.error(f"Request error: {error_details}")
+                error_msg = f"Request error: {error_details}"
                 print(f"API Error - Request exception: {error_details}")
-                ai_reply = "Sorry, there was a network error. Please check your connection and try again."
+                if debug_mode:
+                    ai_reply = f"**DEBUG - ERROR:** {error_msg}"
+                else:
+                    st.error(error_msg)
+                    ai_reply = "Sorry, there was a network error. Please check your connection and try again."
             except Exception as e:
                 error_details = str(e)
-                st.error(f"Unexpected error: {error_details}")
+                error_msg = f"Unexpected error: {error_details}"
                 print(f"API Error - Unexpected exception: {error_details}")
-                ai_reply = "Sorry, an unexpected error occurred. Please try again."
+                if debug_mode:
+                    ai_reply = f"**DEBUG - ERROR:** {error_msg}\n\n**Traceback:**\n```\n{traceback.format_exc()}\n```"
+                else:
+                    st.error(error_msg)
+                    ai_reply = "Sorry, an unexpected error occurred. Please try again."
 
             st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
 
