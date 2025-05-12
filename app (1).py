@@ -51,7 +51,7 @@ GOOGLE_CSE_ID=
 
 # Admin settings
 ADMIN_EMAIL=s-mostafa.abdelhameed@zewailcity.edu.eg
-ADMIN_PASSWORD=25102004Mlp
+ADMIN_PASSWORD=
 
 # Email sending settings (for verification codes)
 EMAIL_SENDER=nutriquest.app@gmail.com
@@ -66,7 +66,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "s-mostafa.abdelhameed@zewailcity.edu.eg")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "25102004Mlp")  # Default password if not in .env
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")  # Default password removed for security
 
 # Email settings
 EMAIL_SENDER = os.getenv("EMAIL_SENDER", "nutriquest.app@gmail.com")
