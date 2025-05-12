@@ -100,6 +100,39 @@ if "custom_models" not in st.session_state:
 if "default_model" not in st.session_state:
     st.session_state.default_model = "nousresearch/deephermes-3-mistral-24b-preview:free"
 
+# Function to check if environment variables are properly set
+def check_environment_variables():
+    """Check if required environment variables are set and guide the user if not"""
+    missing_vars = []
+    
+    if not OPENROUTER_API_KEY:
+        missing_vars.append("OPENROUTER_API_KEY")
+    
+    if not ADMIN_PASSWORD:
+        missing_vars.append("ADMIN_PASSWORD")
+    
+    if missing_vars:
+        st.error("Missing environment variables detected!")
+        st.warning(f"Please set the following in your .env file: {', '.join(missing_vars)}")
+        
+        with st.expander("How to set up your environment"):
+            st.markdown("""
+            ### Setting up your environment
+            
+            1. Create a file named `.env` in the same directory as this script
+            2. Add the following content to the file:
+            ```
+            OPENROUTER_API_KEY=your_openrouter_api_key
+            ADMIN_PASSWORD=your_admin_password
+            ```
+            3. Replace the values with your actual API key and password
+            4. Restart the application
+            
+            Note: The `.env` file is not shared when you push to GitHub.
+            """)
+        return False
+    return True
+
 @st.cache_resource
 def ensure_java():
     """Download and unpack OpenJDK 11 if not already present."""
@@ -968,6 +1001,11 @@ def google_search(query, max_results=5):
 def main():
     apply_custom_css()
 
+    # Check if environment variables are properly set
+    env_vars_ok = check_environment_variables()
+    if not env_vars_ok:
+        st.stop()
+        
     col1, col2, col3 = st.columns([1, 3, 1])
     with col2:
         st.markdown("""
