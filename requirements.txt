@@ -4,3 +4,4 @@ numpy
 nltk
 python-terrier
 requests
+python-dotenv

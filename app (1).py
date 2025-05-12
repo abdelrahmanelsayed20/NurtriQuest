@@ -27,9 +27,79 @@ import urllib.request
 from pathlib import Path
 import json
 import traceback
+import hashlib
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import random
+import string
+import dotenv
+from datetime import datetime, timedelta
+
+# Load environment variables from .env file if it exists
+if os.path.exists(".env"):
+    dotenv.load_dotenv()
+else:
+    # Create .env file with default values if it doesn't exist
+    with open(".env", "w") as env_file:
+        env_file.write(f"""# OpenRouter API Key - Replace with your actual key
+OPENROUTER_API_KEY=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
+
+# Google API Key
+GOOGLE_API_KEY=AIzaSyDDC8BfFj0OwfssNGq1hDYLa59NjGdeULs
+GOOGLE_CSE_ID=81f9834bb6e4e44c1
+
+# Admin settings
+ADMIN_EMAIL=s-mostafa.abdelhameed@zewailcity.edu.eg
+""")
+    dotenv.load_dotenv()
+
+# Get API keys from environment variables
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+GOOGLE_CSE_ID = os.getenv("GOOGLE_CSE_ID", "")
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "s-mostafa.abdelhameed@zewailcity.edu.eg")
+
+# Add .env to .gitignore to prevent API keys from being committed
+if not os.path.exists(".gitignore"):
+    with open(".gitignore", "w") as gitignore_file:
+        gitignore_file.write(".env\n")
+elif ".env" not in open(".gitignore").read():
+    with open(".gitignore", "a") as gitignore_file:
+        gitignore_file.write("\n.env\n")
 
 # Configure logging
 logging.getLogger("org.terrier").setLevel(logging.ERROR)
+
+# Admin authentication helpers
+def generate_verification_code():
+    """Generate a 6-digit verification code"""
+    return ''.join(random.choices(string.digits, k=6))
+
+def send_verification_email(email, code):
+    """Send verification email with code"""
+    try:
+        # For demo purposes, just print the code instead of actually sending email
+        print(f"[DEMO MODE] Verification code for {email}: {code}")
+        st.toast(f"Verification code sent to {email}. Check console for demo code.")
+        return True
+    except Exception as e:
+        print(f"Error sending email: {str(e)}")
+        return False
+
+def verify_admin_email(email):
+    """Check if the email is the admin email"""
+    return email.lower() == ADMIN_EMAIL.lower()
+
+# Session state initialization
+if "admin_authenticated" not in st.session_state:
+    st.session_state.admin_authenticated = False
+if "verification_code" not in st.session_state:
+    st.session_state.verification_code = None
+if "verification_expiry" not in st.session_state:
+    st.session_state.verification_expiry = None
+if "debug_mode" not in st.session_state:
+    st.session_state.debug_mode = False
 
 @st.cache_resource
 def ensure_java():
@@ -872,8 +942,6 @@ def analyze_dataset_for_relevant_docs(df):
 
     return relevant_docs
 
-GOOGLE_API_KEY = "AIzaSyDDC8BfFj0OwfssNGq1hDYLa59NjGdeULs"
-GOOGLE_CSE_ID = "81f9834bb6e4e44c1"
 def google_search(query, max_results=5):
     url = "https://www.googleapis.com/customsearch/v1"
     params = {
@@ -882,17 +950,21 @@ def google_search(query, max_results=5):
         'cx': GOOGLE_CSE_ID,
         'num': max_results
     }
-    response = requests.get(url, params=params)
-    data = response.json()
-    results = []
-    for item in data.get('items', []):
-        results.append({
-            'title': item['title'],
-            'link': item['link'],
-            'description': item.get('snippet', ''),
-            'source': 'Google'
-        })
-    return results
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        results = []
+        for item in data.get('items', []):
+            results.append({
+                'title': item['title'],
+                'link': item['link'],
+                'description': item.get('snippet', ''),
+                'source': 'Google'
+            })
+        return results
+    except Exception as e:
+        print(f"Google search error: {str(e)}")
+        return []
 
 def main():
     apply_custom_css()
@@ -914,9 +986,56 @@ def main():
     st.sidebar.markdown("## Search Options")
     ai_enhanced = st.sidebar.toggle("AI Enhanced Chatbot", value=False, help="Switch to AI-powered chat mode")
     
-    # Hide debug mode in an unexpanded advanced settings section
-    with st.sidebar.expander("Advanced Settings", expanded=False):
-        debug_mode = st.checkbox("Debug Mode", value=False, help="Show detailed error information for troubleshooting")
+    # Admin authentication section (hidden in an expander)
+    with st.sidebar.expander("Admin Access", expanded=False):
+        if not st.session_state.admin_authenticated:
+            admin_email = st.text_input("Admin Email", help="Enter admin email for verification", key="admin_email_input")
+            
+            # Step 1: Request verification code
+            if st.button("Request Verification Code") and admin_email:
+                if verify_admin_email(admin_email):
+                    # Generate and store verification code with 10-minute expiry
+                    verification_code = generate_verification_code()
+                    st.session_state.verification_code = verification_code
+                    st.session_state.verification_expiry = datetime.now() + timedelta(minutes=10)
+                    
+                    # Send verification email (demo mode just prints to console)
+                    if send_verification_email(admin_email, verification_code):
+                        st.success(f"Verification code sent to {admin_email}")
+                    else:
+                        st.error("Failed to send verification code")
+                else:
+                    st.error("Invalid admin email")
+            
+            # Step 2: Verify code
+            verification_code_input = st.text_input("Verification Code", help="Enter the code sent to your email", key="verification_code_input")
+            
+            if st.button("Verify") and verification_code_input:
+                if st.session_state.verification_code and st.session_state.verification_expiry:
+                    if datetime.now() > st.session_state.verification_expiry:
+                        st.error("Verification code expired. Please request a new one.")
+                    elif verification_code_input == st.session_state.verification_code:
+                        st.session_state.admin_authenticated = True
+                        st.success("Admin verified successfully!")
+                        st.rerun()  # Refresh the page to show admin options
+                    else:
+                        st.error("Invalid verification code")
+                else:
+                    st.error("Please request a verification code first")
+        else:
+            st.success("Admin authenticated")
+            if st.button("Logout"):
+                st.session_state.admin_authenticated = False
+                st.session_state.debug_mode = False
+                st.rerun()
+                
+            # Debug mode toggle (only visible after admin authentication)
+            st.session_state.debug_mode = st.checkbox("Enable Debug Mode", 
+                                                    value=st.session_state.debug_mode,
+                                                    help="Show detailed technical information and debugging tools")
+    
+    # Use session state to track debug mode
+    debug_mode = st.session_state.debug_mode
     
     if ai_enhanced:
         st.markdown("<h2 style='color:#ffdd57;'>NutriQuest AI Chatbot</h2>", unsafe_allow_html=True)
@@ -1203,8 +1322,12 @@ def main():
                     "You are a helpful, knowledgeable, and approachable guide for users seeking nutrition and fitness advice. "
                 )
 
-            # API key for OpenRouter.ai - Use custom key from debug settings if available
-            api_key = custom_api_key if debug_mode else "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"
+            # API key for OpenRouter.ai - Use from environment variable
+            api_key = OPENROUTER_API_KEY
+            
+            # Debug options allow overriding the API key if needed
+            if debug_mode and "custom_api_key" in locals() and custom_api_key:
+                api_key = custom_api_key
             
             # Ensure the API key is properly formatted
             if not api_key.startswith("sk-"):
