@@ -60,6 +60,7 @@ if not pt.java.started():
 @st.cache_resource
 def download_nltk_resources():
     nltk.download('punkt')
+    nltk.download('punkt_tab')
     nltk.download('stopwords')
     nltk.download('words')
 
