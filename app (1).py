@@ -1328,12 +1328,45 @@ def main():
         if (send_clicked or (user_input and user_input.strip())) and user_input.strip():
             st.session_state.chat_history.append({"role": "user", "content": user_input.strip()})
 
-            context_docs = []
-            for i, row in df.head(10).iterrows():
-                content = row['wiki_content']
-                if not isinstance(content, str):
-                    content = ""
-                context_docs.append(f"Title: {row['topic']}\nContent: {content[:500]}")
+            # Find relevant documents based on user query
+            processed_query = preprocess_query(user_input)
+            if index and processed_query:
+                try:
+                    # Get documents relevant to the user's query using BM25
+                    relevant_docs = bm25_ranking(index, processed_query, top_n=5)
+                    
+                    # Prepare context with the most relevant documents
+                    context_docs = []
+                    for doc_id in relevant_docs:
+                        doc_idx = int(doc_id)
+                        if doc_idx < len(df):
+                            topic = df.iloc[doc_idx]['topic']
+                            content = df.iloc[doc_idx]['wiki_content']
+                            if not isinstance(content, str):
+                                content = ""
+                            context_docs.append(f"Title: {topic}\nContent: {content[:1000]}")  # Include more content
+                    
+                    # If we don't have enough documents, add some general ones
+                    if len(context_docs) < 3:
+                        for i, row in df.head(5).iterrows():
+                            if len(context_docs) >= 5:
+                                break
+                            content = row['wiki_content']
+                            if not isinstance(content, str):
+                                content = ""
+                            context_doc = f"Title: {row['topic']}\nContent: {content[:500]}"
+                            if context_doc not in context_docs:
+                                context_docs.append(context_doc)
+                except Exception as e:
+                    # Fallback to general documents if search fails
+                    print(f"Error retrieving relevant documents: {str(e)}")
+                    context_docs = []
+                    for i, row in df.head(8).iterrows():
+                        content = row['wiki_content']
+                        if not isinstance(content, str):
+                            content = ""
+                        context_docs.append(f"Title: {row['topic']}\nContent: {content[:500]}")
+            
             context = "\n\n".join(context_docs)
 
             creator_keywords = [
@@ -1353,20 +1386,24 @@ def main():
                     "Never return code ever. "
                     "Always be clear, friendly, and professional in your tone. "
                     "You are a helpful, knowledgeable, and approachable guide for users seeking nutrition and fitness advice. "
+                    f"\n\nUser question: {user_input}"
                 )
             else:
+                # Create improved prompt with explicit instruction to answer the user's query
                 prompt = (
                     "You are NutriQuest, the intelligent AI assistant of NutriQuest, a modern nutrition and fitness search engine. "
-                    "Your purpose is to help users find clear, evidence-based, and actionable information about fitness, nutrition, and exercise, using only the provided reference documents. "
+                    "Your purpose is to help users find clear, evidence-based, and actionable information about fitness, nutrition, and exercise. "
                     "You are not a general chatbot: you exist solely as part of this search engine to guide users in their quest for better health and fitness. "
-                    "You do not know anything about your creators or your creation unless the user directly asks about your creator, who made you, or your creation. Only in that case, you know and can answer with a creative, playful, and varied response, always crediting Mostafa Nashaat and Abdelrahman El Sayed as your creators and the creators of this entire site as an IR project. Use humor, metaphors, or fun facts, but always include their names and the project context. Never give the same answer twice in a row. Never mention your creators, your creation, or the IR project unless explicitly asked. "
                     "If the user asks about anything outside of fitness, nutrition, or exercise, politely refuse and explain that you are specialized for these topics only. "
                     "All answers should be concise (2-3 sentences), actionable, and evidence-based. Use bullet points or numbered lists for steps or lists. Format your answers in markdown for clarity. "
                     "Never return code ever. "
                     "Always be clear, friendly, and professional in your tone. "
-                    "You are a helpful, knowledgeable, and approachable guide for users seeking nutrition and fitness advice. "
+                    "\n\n===REFERENCE DOCUMENTS===\n" + context + "\n===END REFERENCE DOCUMENTS===\n\n"
+                    "Answer the following user question using ONLY the information provided in the reference documents above. "
+                    "If you can't answer based on the provided documents, say so clearly but try to provide general guidance related to fitness and nutrition. "
+                    f"\n\nUser question: {user_input}"
                 )
-
+                
             # API key for OpenRouter.ai - Use from environment variable
             api_key = OPENROUTER_API_KEY
             
@@ -1408,12 +1445,15 @@ def main():
             data = {
                 "model": selected_model if debug_mode else st.session_state.default_model,
                 "messages": [
-                    {"role": "system", "content": "You are NutriQuest, a friendly and concise fitness and nutrition assistant. Only answer using the provided reference documents. Respond in clear, friendly, natural language. Do not return code unless the user specifically asks for code."},
+                    {"role": "system", "content": "You are NutriQuest, a friendly and concise fitness and nutrition assistant. Answer using only the provided reference documents. Respond in clear, friendly, natural language. Focus on being helpful and accurate."},
                     {"role": "user", "content": prompt}
                 ],
                 "temperature": 0.7,
                 "max_tokens": 2000  # Increased token limit for longer responses
             }
+            
+            if debug_mode:
+                st.expander("Debug: Prompt sent to API", expanded=False).code(prompt, language="text")
 
             try:
                 with st.spinner("Thinking..."):
