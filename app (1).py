@@ -25,6 +25,7 @@ import os
 import tarfile
 import urllib.request
 from pathlib import Path
+import json
 
 # Configure logging
 logging.getLogger("org.terrier").setLevel(logging.ERROR)
@@ -1003,7 +1004,8 @@ def main():
                     "You are a helpful, knowledgeable, and approachable guide for users seeking nutrition and fitness advice. "
                 )
 
-            api_key = "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"
+            # API key for OpenRouter.ai
+            api_key = "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"
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -1022,27 +1024,41 @@ def main():
 
             try:
                 with st.spinner("Thinking..."):
+                    # Log the API request for debugging purposes
+                    print(f"Sending request to OpenRouter.ai API with model: mistralai/mistral-7b-instruct")
+                    
                     response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=60)
                     response_json = response.json()
 
+                    # Print response status and headers for debugging
+                    print(f"API Response Status: {response.status_code}")
+                    
                     if response.status_code == 200:
                         if 'choices' in response_json and len(response_json['choices']) > 0:
                             ai_reply = response_json["choices"][0]["message"]["content"]
                             ai_reply = re.sub(r'```[a-zA-Z]*\n?|```', '', ai_reply).strip()
                         else:
-                            st.error(f"Unexpected API response format: {response_json}")
+                            error_detail = json.dumps(response_json, indent=2)
+                            st.error(f"Unexpected API response format: {error_detail}")
+                            print(f"API Error - Unexpected response format: {error_detail}")
                             ai_reply = "I apologize, but I received an unexpected response format from the AI service. Please try again."
                     else:
                         error_msg = f"API Error (Status {response.status_code}): {response.text}"
                         st.error(error_msg)
+                        print(f"API Error - Status {response.status_code}: {response.text}")
                         ai_reply = f"Sorry, there was an error contacting the AI API. Please try again later."
             except requests.exceptions.Timeout:
+                print("API Error - Request timeout after 60 seconds")
                 ai_reply = "Sorry, the request timed out. Please try again."
             except requests.exceptions.RequestException as e:
-                st.error(f"Request error: {str(e)}")
+                error_details = str(e)
+                st.error(f"Request error: {error_details}")
+                print(f"API Error - Request exception: {error_details}")
                 ai_reply = "Sorry, there was a network error. Please check your connection and try again."
             except Exception as e:
-                st.error(f"Unexpected error: {str(e)}")
+                error_details = str(e)
+                st.error(f"Unexpected error: {error_details}")
+                print(f"API Error - Unexpected exception: {error_details}")
                 ai_reply = "Sorry, an unexpected error occurred. Please try again."
 
             st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
