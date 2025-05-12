@@ -913,24 +913,28 @@ def main():
 
     st.sidebar.markdown("## Search Options")
     ai_enhanced = st.sidebar.toggle("AI Enhanced Chatbot", value=False, help="Switch to AI-powered chat mode")
-    debug_mode = st.sidebar.toggle("Debug Mode", value=False, help="Show detailed error information for troubleshooting")
-
+    
+    # Hide debug mode in an unexpanded advanced settings section
+    with st.sidebar.expander("Advanced Settings", expanded=False):
+        debug_mode = st.checkbox("Debug Mode", value=False, help="Show detailed error information for troubleshooting")
+    
     if ai_enhanced:
         st.markdown("<h2 style='color:#ffdd57;'>NutriQuest AI Chatbot</h2>", unsafe_allow_html=True)
         st.info("Ask anything about fitness and nutrition. The AI will only use the site's documents as reference.")
-
+        
+        # Add API key input in the sidebar when debug mode is on
         if debug_mode:
             st.warning("Debug mode is enabled. Detailed error information will be displayed if any errors occur.")
             with st.sidebar.expander("API Settings", expanded=True):
                 custom_api_key = st.text_input("Custom API Key (OpenRouter.ai)", 
-                                             value="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",
+                                             value="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",
                                              type="password",
                                              help="Enter your OpenRouter.ai API key")
                 
                 use_header_auth = st.checkbox("Use Authorization Header", value=True, 
                                            help="Send API key in Authorization header (standard method)")
                 
-                use_query_param_auth = st.checkbox("Use Query Parameter", value=False, 
+                use_query_param_auth = st.checkbox("Use Query Parameter", value=True, 
                                                help="Send API key as a query parameter (alternative method)")
                 
                 api_url = st.text_input("API URL", value="https://openrouter.ai/api/v1/chat/completions",
@@ -1014,20 +1018,126 @@ def main():
         else:
             st.markdown("""
             <style>
-            .nq-chat-container { max-width: 700px; margin: 0 auto; padding: 32px 0 100px 0; }
-            .nq-chat-row { display: flex; align-items: flex-end; margin-bottom: 18px; }
+            .nq-chat-container { 
+                max-width: 800px; 
+                margin: 0 auto; 
+                padding: 32px 0 120px 0;
+                font-family: 'Helvetica Neue', Arial, sans-serif;
+            }
+            .nq-chat-row { 
+                display: flex; 
+                align-items: flex-end; 
+                margin-bottom: 24px; 
+                animation: fadeIn 0.3s ease-in;
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
             .nq-chat-row.user { justify-content: flex-end; }
             .nq-chat-row.ai { justify-content: flex-start; }
-            .nq-bubble { padding: 16px 22px; border-radius: 18px; max-width: 75%; font-size: 1.08em; box-shadow: 0 2px 8px rgba(0,0,0,0.07); margin: 0 8px; line-height: 1.6; }
-            .nq-bubble.user { background: linear-gradient(90deg, #ffdd57 0%, #ffe484 100%); color: #222; border-bottom-right-radius: 6px; }
-            .nq-bubble.ai { background: #23272f; color: #e0e0e0; border-bottom-left-radius: 6px; }
-            .nq-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5em; margin: 0 4px; }
-            .nq-avatar.user { background: #ffdd57; color: #222; }
-            .nq-avatar.ai { background: #23272f; color: #ffdd57; }
-            .nq-input-bar { position: fixed; left: 0; bottom: 0; width: 100vw; background: #181818; padding: 18px 0 18px 0; box-shadow: 0 -2px 12px rgba(0,0,0,0.12); z-index: 100; }
-            .nq-input-inner { max-width: 700px; margin: 0 auto; display: flex; align-items: center; }
-            .nq-input-inner input { width: 100%; background: #23272f; color: #e0e0e0; border: 1px solid #444; border-radius: 8px; padding: 12px 16px; font-size: 1.1em; margin-right: 10px; }
-            .nq-send-btn button { background: #ffdd57; color: #23272f; font-weight: bold; border-radius: 8px; padding: 8px 24px; font-size: 1.1em; }
+            .nq-bubble { 
+                padding: 18px 24px; 
+                border-radius: 20px; 
+                max-width: 85%; 
+                font-size: 1.08em; 
+                box-shadow: 0 3px 10px rgba(0,0,0,0.1); 
+                margin: 0 12px; 
+                line-height: 1.6;
+                word-break: break-word;
+            }
+            .nq-bubble.user { 
+                background: linear-gradient(90deg, #ffdd57 0%, #ffe484 100%); 
+                color: #222; 
+                border-bottom-right-radius: 6px;
+                font-weight: 500;
+            }
+            .nq-bubble.ai { 
+                background: #23272f; 
+                color: #e0e0e0; 
+                border-bottom-left-radius: 6px;
+            }
+            .nq-avatar { 
+                width: 44px; 
+                height: 44px; 
+                border-radius: 50%; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                font-size: 1.5em; 
+                margin: 0 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            }
+            .nq-avatar.user { 
+                background: #ffdd57; 
+                color: #222;
+            }
+            .nq-avatar.ai { 
+                background: #23272f; 
+                color: #ffdd57;
+            }
+            .nq-input-bar { 
+                position: fixed; 
+                left: 0; 
+                bottom: 0; 
+                width: 100vw; 
+                background: #181818; 
+                padding: 18px 0; 
+                box-shadow: 0 -3px 15px rgba(0,0,0,0.15); 
+                z-index: 100;
+                border-top: 1px solid #333;
+            }
+            .nq-input-inner { 
+                max-width: 800px; 
+                margin: 0 auto; 
+                display: flex; 
+                align-items: center;
+                padding: 0 20px;
+            }
+            .stForm {
+                background-color: transparent !important;
+                border: none !important;
+                padding: 0 !important;
+                margin-bottom: 0 !important;
+            }
+            .nq-input-inner .stTextInput input, 
+            .stForm .stTextInput input { 
+                width: 100%; 
+                background: #23272f; 
+                color: #e0e0e0; 
+                border: 1px solid #444; 
+                border-radius: 10px; 
+                padding: 15px 20px; 
+                font-size: 1.1em; 
+                margin-right: 10px;
+                transition: all 0.2s ease;
+            }
+            .nq-input-inner .stTextInput input:focus,
+            .stForm .stTextInput input:focus { 
+                border-color: #ffdd57;
+                box-shadow: 0 0 0 1px #ffdd57;
+            }
+            .stForm [data-testid="stFormSubmitButton"] button {
+                background: #ffdd57; 
+                color: #23272f; 
+                font-weight: bold; 
+                border-radius: 10px; 
+                padding: 10px 30px; 
+                font-size: 1.1em;
+                transition: all 0.2s ease;
+                border: none;
+            }
+            .stForm [data-testid="stFormSubmitButton"] button:hover {
+                background: #ffe484;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            }
+            /* Hide the form's default container styling */
+            .stForm > div[data-testid="stForm"] {
+                border: none !important;
+                padding: 0 !important;
+                background: none !important;
+            }
             </style>
             """, unsafe_allow_html=True)
 
@@ -1042,8 +1152,13 @@ def main():
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="nq-input-bar"><div class="nq-input-inner">', unsafe_allow_html=True)
-            user_input = st.text_input("You:", key="ai_chat_input", label_visibility="collapsed", placeholder="Type your message and press Enter...")
-            send_clicked = st.button("Send", key="ai_chat_send")
+            
+            # Create a form to allow Enter key submission
+            with st.form(key="chat_form", clear_on_submit=True):
+                user_input = st.text_input("You:", key="ai_chat_input", label_visibility="collapsed", placeholder="Type your message and press Enter...")
+                submit_button = st.form_submit_button("Send", use_container_width=True)
+                send_clicked = submit_button and user_input and user_input.strip()
+            
             st.markdown('</div></div>', unsafe_allow_html=True)
 
         if (send_clicked or (user_input and user_input.strip())) and user_input.strip():
@@ -1089,7 +1204,7 @@ def main():
                 )
 
             # API key for OpenRouter.ai - Use custom key from debug settings if available
-            api_key = custom_api_key if debug_mode else "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"
+            api_key = custom_api_key if debug_mode else "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"
             
             # Ensure the API key is properly formatted
             if not api_key.startswith("sk-"):
@@ -1102,20 +1217,20 @@ def main():
                 "X-Title": "NutriQuest"
             }
             
-            # Add authorization header if using that authentication method
-            if not debug_mode or use_header_auth:
-                headers["Authorization"] = f"Bearer {api_key}"
+            # Add authorization header by default (always use)
+            headers["Authorization"] = f"Bearer {api_key}"
             
             # Determine the API URL based on authentication method
             api_url = api_url if debug_mode else "https://openrouter.ai/api/v1/chat/completions"
-            if debug_mode and use_query_param_auth:
-                api_url = f"{api_url}?api_key={api_key}"
+            
+            # Always use query parameter authentication too (this is what worked for the user)
+            api_url = f"{api_url}?api_key={api_key}"
             
             # Verify authentication settings
             if debug_mode:
                 auth_check = {
                     "using_auth_header": "Authorization" in headers,
-                    "using_query_param": use_query_param_auth,
+                    "using_query_param": True,
                     "auth_header_value_length": len(headers.get("Authorization", "").replace("Bearer ", "")) if "Authorization" in headers else 0,
                     "api_url": api_url.split("?")[0] + ("?..." if "?" in api_url else "")
                 }
@@ -1123,13 +1238,13 @@ def main():
                 print(f"Auth Check: {json.dumps(auth_check, indent=2)}")
             
             data = {
-                "model": selected_model if debug_mode else "mistralai/mistral-7b-instruct",
+                "model": selected_model if debug_mode else "anthropic/claude-3-haiku",
                 "messages": [
                     {"role": "system", "content": "You are NutriQuest, a friendly and concise fitness and nutrition assistant. Only answer using the provided reference documents. Respond in clear, friendly, natural language. Do not return code unless the user specifically asks for code."},
                     {"role": "user", "content": prompt}
                 ],
                 "temperature": 0.7,
-                "max_tokens": 500
+                "max_tokens": 2000  # Increased token limit for longer responses
             }
 
             try:
