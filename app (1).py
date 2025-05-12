@@ -921,6 +921,86 @@ def main():
 
         if debug_mode:
             st.warning("Debug mode is enabled. Detailed error information will be displayed if any errors occur.")
+            with st.sidebar.expander("API Settings", expanded=True):
+                custom_api_key = st.text_input("Custom API Key (OpenRouter.ai)", 
+                                             value="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",
+                                             type="password",
+                                             help="Enter your OpenRouter.ai API key")
+                
+                use_header_auth = st.checkbox("Use Authorization Header", value=True, 
+                                           help="Send API key in Authorization header (standard method)")
+                
+                use_query_param_auth = st.checkbox("Use Query Parameter", value=False, 
+                                               help="Send API key as a query parameter (alternative method)")
+                
+                api_url = st.text_input("API URL", value="https://openrouter.ai/api/v1/chat/completions",
+                                       help="OpenRouter API endpoint URL")
+                
+                endpoint_options = [
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    "https://api.openrouter.ai/api/v1/chat/completions",
+                    "https://openrouter.ai/api/v1/chat/completions+",
+                ]
+                if api_url not in endpoint_options:
+                    endpoint_options.append(api_url)
+                
+                selected_endpoint = st.selectbox("Quick Endpoint Select", options=endpoint_options, 
+                            help="Choose a predefined API endpoint")
+                
+                # Apply the selected endpoint to the API URL if different
+                if selected_endpoint != api_url:
+                    api_url = selected_endpoint
+                
+                model_options = [
+                    "mistralai/mistral-7b-instruct",
+                    "anthropic/claude-3-haiku",
+                    "google/gemma-7b-it",
+                    "openai/gpt-3.5-turbo"
+                ]
+                selected_model = st.selectbox("AI Model", options=model_options, 
+                                             help="Choose which AI model to use for chat responses")
+                
+                if st.button("Test API Connection"):
+                    test_api_key = custom_api_key.strip()
+                    headers_test = {
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://nutriquest.streamlit.app",
+                        "X-Title": "NutriQuest"
+                    }
+                    
+                    if use_header_auth:
+                        headers_test["Authorization"] = f"Bearer {test_api_key}"
+                    
+                    test_url = api_url
+                    if use_query_param_auth:
+                        test_url = f"{api_url}?api_key={test_api_key}"
+                    
+                    test_data = {
+                        "model": "mistralai/mistral-7b-instruct",
+                        "messages": [
+                            {"role": "system", "content": "You are a test assistant."},
+                            {"role": "user", "content": "Say 'API connection successful' if you receive this message."}
+                        ],
+                        "max_tokens": 20
+                    }
+                    
+                    try:
+                        with st.spinner("Testing API connection..."):
+                            st.code(f"Testing: {test_url}\nHeaders: {headers_test}\nData: {test_data}", language="yaml")
+                            response = requests.post(test_url, headers=headers_test, json=test_data, timeout=20)
+                            
+                            try:
+                                response_json = response.json()
+                                st.code(f"Response ({response.status_code}):\n{json.dumps(response_json, indent=2)}", language="json")
+                                
+                                if response.status_code == 200:
+                                    st.success("API connection test successful!")
+                                else:
+                                    st.error(f"API Error: Status {response.status_code}")
+                            except:
+                                st.error(f"Failed to parse JSON response: {response.text}")
+                    except Exception as e:
+                        st.error(f"Test failed: {str(e)}")
 
         if "chat_history" not in st.session_state:
             st.session_state.chat_history = []
@@ -1008,16 +1088,42 @@ def main():
                     "You are a helpful, knowledgeable, and approachable guide for users seeking nutrition and fitness advice. "
                 )
 
-            # API key for OpenRouter.ai
-            api_key = "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"
+            # API key for OpenRouter.ai - Use custom key from debug settings if available
+            api_key = custom_api_key if debug_mode else "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"
+            
+            # Ensure the API key is properly formatted
+            if not api_key.startswith("sk-"):
+                print("Warning: API key doesn't have the expected format (should start with 'sk-')")
+            
+            # Set up headers with proper authentication
             headers = {
-                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://nutriquest.streamlit.app",
                 "X-Title": "NutriQuest"
             }
+            
+            # Add authorization header if using that authentication method
+            if not debug_mode or use_header_auth:
+                headers["Authorization"] = f"Bearer {api_key}"
+            
+            # Determine the API URL based on authentication method
+            api_url = api_url if debug_mode else "https://openrouter.ai/api/v1/chat/completions"
+            if debug_mode and use_query_param_auth:
+                api_url = f"{api_url}?api_key={api_key}"
+            
+            # Verify authentication settings
+            if debug_mode:
+                auth_check = {
+                    "using_auth_header": "Authorization" in headers,
+                    "using_query_param": use_query_param_auth,
+                    "auth_header_value_length": len(headers.get("Authorization", "").replace("Bearer ", "")) if "Authorization" in headers else 0,
+                    "api_url": api_url.split("?")[0] + ("?..." if "?" in api_url else "")
+                }
+                st.code(f"Auth Check: {json.dumps(auth_check, indent=2)}", language="json")
+                print(f"Auth Check: {json.dumps(auth_check, indent=2)}")
+            
             data = {
-                "model": "mistralai/mistral-7b-instruct",
+                "model": selected_model if debug_mode else "mistralai/mistral-7b-instruct",
                 "messages": [
                     {"role": "system", "content": "You are NutriQuest, a friendly and concise fitness and nutrition assistant. Only answer using the provided reference documents. Respond in clear, friendly, natural language. Do not return code unless the user specifically asks for code."},
                     {"role": "user", "content": prompt}
@@ -1030,7 +1136,7 @@ def main():
                 with st.spinner("Thinking..."):
                     # Log the API request for debugging purposes
                     req_data = {
-                        "url": "https://openrouter.ai/api/v1/chat/completions",
+                        "url": api_url.split("?")[0] + ("?..." if "?" in api_url else ""),
                         "headers": {k: v if k != "Authorization" else "Bearer sk-****" for k, v in headers.items()},
                         "model": data["model"],
                         "messages_count": len(data["messages"])
@@ -1042,7 +1148,7 @@ def main():
                     
                     print(f"Sending request to OpenRouter.ai API with model: {data['model']}")
                     
-                    response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=60)
+                    response = requests.post(api_url, headers=headers, json=data, timeout=60)
                     
                     try:
                         response_json = response.json()
