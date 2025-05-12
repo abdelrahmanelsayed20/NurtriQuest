@@ -34,3 +34,7 @@ env/
 # OS specific files
 .DS_Store
 Thumbs.db 
+
+# Environment variables - should never be committed
+.env
+*.env 
