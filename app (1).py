@@ -99,6 +99,12 @@ if "custom_models" not in st.session_state:
     st.session_state.custom_models = []
 if "default_model" not in st.session_state:
     st.session_state.default_model = "nousresearch/deephermes-3-mistral-24b-preview:free"
+if "search_index" not in st.session_state:
+    st.session_state.search_index = None
+if "unique_terms" not in st.session_state:
+    st.session_state.unique_terms = []
+if "inverted_index" not in st.session_state:
+    st.session_state.inverted_index = {}
 
 # Function to check if environment variables are properly set
 def check_environment_variables():
@@ -1330,10 +1336,12 @@ def main():
 
             # Find relevant documents based on user query
             processed_query = preprocess_query(user_input)
-            if index and processed_query:
+            search_index = st.session_state.search_index
+            
+            if search_index is not None and processed_query:
                 try:
                     # Get documents relevant to the user's query using BM25
-                    relevant_docs = bm25_ranking(index, processed_query, top_n=5)
+                    relevant_docs = bm25_ranking(search_index, processed_query, top_n=5)
                     
                     # Prepare context with the most relevant documents
                     context_docs = []
@@ -1553,6 +1561,11 @@ def main():
             status_placeholder.info("Loading search index...")
 
         index, unique_terms, inverted_index = create_index(df)
+
+        # Store the index and related data in session state for use across the app
+        st.session_state.search_index = index
+        st.session_state.unique_terms = unique_terms
+        st.session_state.inverted_index = inverted_index
 
         status_placeholder.empty()
 
