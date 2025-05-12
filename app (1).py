@@ -94,6 +94,10 @@ if "admin_authenticated" not in st.session_state:
     st.session_state.admin_authenticated = False
 if "debug_mode" not in st.session_state:
     st.session_state.debug_mode = False
+if "custom_models" not in st.session_state:
+    st.session_state.custom_models = []
+if "default_model" not in st.session_state:
+    st.session_state.default_model = "nousresearch/deephermes-3-mistral-24b-preview:free"
 
 @st.cache_resource
 def ensure_java():
@@ -1016,7 +1020,7 @@ def main():
             st.warning("Debug mode is enabled. Detailed error information will be displayed if any errors occur.")
             with st.sidebar.expander("API Settings", expanded=True):
                 custom_api_key = st.text_input("Custom API Key (OpenRouter.ai)", 
-                                             value="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",
+                                             value=OPENROUTER_API_KEY,
                                              type="password",
                                              help="Enter your OpenRouter.ai API key")
                 
@@ -1044,15 +1048,47 @@ def main():
                 if selected_endpoint != api_url:
                     api_url = selected_endpoint
                 
+                # Standard models plus the new default and any custom models
                 model_options = [
-                    "mistralai/mistral-7b-instruct",
+                    "nousresearch/deephermes-3-mistral-24b-preview:free", # New default model
                     "anthropic/claude-3-haiku",
+                    "mistralai/mistral-7b-instruct",
                     "google/gemma-7b-it",
                     "openai/gpt-3.5-turbo"
                 ]
-                selected_model = st.selectbox("AI Model", options=model_options, 
-                                             help="Choose which AI model to use for chat responses")
                 
+                # Add any custom models from session state
+                for custom_model in st.session_state.custom_models:
+                    if custom_model not in model_options:
+                        model_options.append(custom_model)
+                
+                # Allow admin to add custom models
+                with st.form(key="add_model_form"):
+                    new_model = st.text_input("Add Custom Model", 
+                                            placeholder="Enter model identifier (e.g., openai/gpt-4)",
+                                            help="Add a custom model to the dropdown list")
+                    submitted = st.form_submit_button("Add Model")
+                    if submitted and new_model and new_model not in model_options:
+                        st.session_state.custom_models.append(new_model)
+                        model_options.append(new_model)
+                        st.success(f"Added model: {new_model}")
+                        st.rerun()
+                
+                # Select model from options (with new default)
+                default_index = 0  # Default to the first model (deephermes)
+                if st.session_state.default_model in model_options:
+                    default_index = model_options.index(st.session_state.default_model)
+                    
+                selected_model = st.selectbox("AI Model", 
+                                           options=model_options,
+                                           index=default_index,
+                                           help="Choose which AI model to use for chat responses")
+                
+                # Save selected model as default
+                if selected_model != st.session_state.default_model:
+                    st.session_state.default_model = selected_model
+                    
+                # Restore the API connection test button
                 if st.button("Test API Connection"):
                     test_api_key = custom_api_key.strip()
                     headers_test = {
@@ -1069,7 +1105,7 @@ def main():
                         test_url = f"{api_url}?api_key={test_api_key}"
                     
                     test_data = {
-                        "model": "mistralai/mistral-7b-instruct",
+                        "model": selected_model,
                         "messages": [
                             {"role": "system", "content": "You are a test assistant."},
                             {"role": "user", "content": "Say 'API connection successful' if you receive this message."}
@@ -1331,7 +1367,7 @@ def main():
                 print(f"Auth Check: {json.dumps(auth_check, indent=2)}")
             
             data = {
-                "model": selected_model if debug_mode else "anthropic/claude-3-haiku",
+                "model": selected_model if debug_mode else st.session_state.default_model,
                 "messages": [
                     {"role": "system", "content": "You are NutriQuest, a friendly and concise fitness and nutrition assistant. Only answer using the provided reference documents. Respond in clear, friendly, natural language. Do not return code unless the user specifically asks for code."},
                     {"role": "user", "content": prompt}
