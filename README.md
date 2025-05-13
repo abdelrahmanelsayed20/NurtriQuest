@@ -15,6 +15,11 @@ NutriQuest is an advanced information retrieval application that uses natural la
 - **Performance Metrics**: Calculates precision, recall, F1 score, and NDCG to evaluate search quality
 - **User-friendly Interface**: Clean, intuitive Streamlit web application interface
 
+## Live Demo
+
+The application is hosted and available online at:
+https://nutriquest.streamlit.app/
+
 ## Installation
 
 1. Clone the repository:
