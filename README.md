@@ -14,6 +14,7 @@ NutriQuest is an advanced information retrieval application that uses natural la
 - **NLP Processing**: Implements tokenization, stemming, and stopword removal for improved search precision
 - **Performance Metrics**: Calculates precision, recall, F1 score, and NDCG to evaluate search quality
 - **User-friendly Interface**: Clean, intuitive Streamlit web application interface
+- **AI-powered Chatbot**: Interactive assistant that provides personalized nutrition and fitness advice
 
 ## Live Demo
 
@@ -58,6 +59,18 @@ https://nutriquest.streamlit.app/
 
 4. Use the available filters to refine your search results
 
+5. Toggle the "AI Enhanced Chatbot" option in the sidebar to switch to the conversational assistant
+
+## AI Assistant
+
+NutriQuest features an AI-powered chatbot that provides personalized nutrition and fitness guidance:
+
+- **Knowledge-Based Responses**: The chatbot utilizes the NutriQuest document database to provide evidence-based answers
+- **Contextual Understanding**: Maintains conversation history to provide relevant follow-up responses
+- **Customizable Models**: Administrators can select different AI models for varied capabilities (powered by OpenRouter API)
+- **Multi-Source Integration**: Pulls information from Wikipedia, YouTube, and Google search results
+- **User-Friendly Interface**: Clean chat interface with easy-to-read message bubbles and smooth animations
+
 ## Technology Stack
 
 - **Streamlit**: Web application framework
@@ -66,6 +79,7 @@ https://nutriquest.streamlit.app/
 - **Pandas**: Data manipulation and analysis
 - **NumPy**: Numerical computing
 - **Requests**: HTTP requests for external API integration
+- **OpenRouter API**: AI model integration for the chatbot functionality
 
 ## Project Structure
 
@@ -77,6 +91,7 @@ The main components of NutriQuest include:
 - Query expansion using RM3 technique
 - Performance evaluation metrics
 - User interface with customization options
+- AI chatbot integration with OpenRouter
 
 ## Contributing
 
