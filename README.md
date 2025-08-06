@@ -103,4 +103,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Contact
 
-For any questions or suggestions, please open an issue on GitHub or contact the project maintainer at s-mostafa.abdelhameed@zewailcity.edu.eg.
+For any questions or suggestions, please open an issue on GitHub or contact the project maintainer at s-mostafa.abdelhameed@zewailcity.edu.eg.  or at S-abdulrahman.hassan@zewailcity.com
+
